@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-get-away
-  namespace: api-get-away
+  name: api-gateway
+  namespace: api-gateway
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: api-get-away
+      app: api-gateway
   template:
     metadata:
       labels:
-        app: api-get-away
+        app: api-gateway
     spec:
       containers:
         - name: app
-          image: ghcr.io/krishnarajt/api-get-away:git-86657af4468a89717da01cd1cf60fb191abc1994
+          image: ghcr.io/krishnarajt/api-gateway:git-86657af4468a89717da01cd1cf60fb191abc1994
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
@@ -23,7 +23,7 @@ spec:
 
           envFrom:
             - secretRef:
-                name: api-get-away-env
+                name: api-gateway-env
 
           livenessProbe:
             httpGet:

@@ -147,7 +147,7 @@ src/
 
 ```bash
 git clone <repository-url>
-cd api-get-away
+cd api-gateway
 npm install
 ```
 

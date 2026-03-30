@@ -1,7 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: api-get-away-redis
+    container_name: api-gateway-redis
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ./redis_data:/data
@@ -13,9 +13,9 @@ services:
       timeout: 5s
       retries: 5
 
-  api-get-away:
+  api-gateway:
     build: .
-    container_name: api-get-away
+    container_name: api-gateway
     env_file: .env
     depends_on:
       - redis
