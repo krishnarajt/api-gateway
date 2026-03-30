@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-get-away
+  namespace: api-get-away
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-get-away
+  template:
+    metadata:
+      labels:
+        app: api-get-away
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/krishnarajt/api-get-away:git-86657af4468a89717da01cd1cf60fb191abc1994
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+              name: http
+
+          envFrom:
+            - secretRef:
+                name: api-get-away-env
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

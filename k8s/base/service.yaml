@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-get-away
+  namespace: api-get-away
+spec:
+  type: NodePort
+  selector:
+    app: api-get-away
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      nodePort: 32010
