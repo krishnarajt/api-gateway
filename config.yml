@@ -1,10 +1,9 @@
 defaultBackend: "http://100.69.148.22:4070"   # fallback
 
 allowedOrigins:
-  - "https://authentic-tracker.krishnarajthadesar.in"
   - "https://authentic-tracker.vercel.app"
   - "https://api-get-away.krishnarajthadesar.in"
 
 mappings:
   - name: "authentic-tracker"
-    backend: "http://100.69.148.22:7001"
+    backend: "http://100.69.148.22:32011"
