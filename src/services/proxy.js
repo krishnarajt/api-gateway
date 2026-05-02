@@ -21,6 +21,29 @@ export function resolveBackend(req) {
   return getDefaultBackend();
 }
 
+function injectUserHeaders(proxyReq, req) {
+  // Strip any client-provided user headers to prevent spoofing
+  proxyReq.removeHeader("x-user-email");
+  proxyReq.removeHeader("x-user-sub");
+  proxyReq.removeHeader("x-user-name");
+
+  // Inject from authenticated session (set by requireAuth)
+  const user = req.auth?.tokenSet?.user;
+  if (user) {
+    if (user.email) proxyReq.setHeader("x-user-email", user.email);
+    if (user.sub) proxyReq.setHeader("x-user-sub", user.sub);
+    if (user.name) proxyReq.setHeader("x-user-name", user.name);
+  }
+}
+
+function handleProxyError(err, req, res) {
+  logger.error({ err, url: req.originalUrl }, "Proxy error");
+  if (!res.headersSent) {
+    res.writeHead(502, { "Content-Type": "application/json" });
+  }
+  res.end(JSON.stringify({ error: "bad_gateway", message: err?.message || "proxy error" }));
+}
+
 export function createApiProxy() {
   const proxy = createProxyMiddleware({
     changeOrigin: true,
@@ -34,27 +57,10 @@ export function createApiProxy() {
 
     router: (req) => resolveBackend(req),
 
-    onProxyReq: (proxyReq, req) => {
-      // Strip any client-provided user headers to prevent spoofing
-      proxyReq.removeHeader("x-user-email");
-      proxyReq.removeHeader("x-user-sub");
-      proxyReq.removeHeader("x-user-name");
-
-      // Inject from authenticated session (set by requireAuth)
-      const user = req.auth?.tokenSet?.user;
-      if (user) {
-        if (user.email) proxyReq.setHeader("x-user-email", user.email);
-        if (user.sub) proxyReq.setHeader("x-user-sub", user.sub);
-        if (user.name) proxyReq.setHeader("x-user-name", user.name);
-      }
-    },
-
-    onError: (err, req, res) => {
-      logger.error({ err, url: req.originalUrl }, "Proxy error");
-      if (!res.headersSent) {
-        res.writeHead(502, { "Content-Type": "application/json" });
-      }
-      res.end(JSON.stringify({ error: "bad_gateway", message: err?.message || "proxy error" }));
+    on: {
+      error: handleProxyError,
+      proxyReq: injectUserHeaders,
+      proxyReqWs: injectUserHeaders,
     },
   });
 

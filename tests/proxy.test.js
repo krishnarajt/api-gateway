@@ -61,7 +61,7 @@ describe("proxy", () => {
     });
   });
 
-  describe("onProxyReq — header spoofing prevention (#10)", () => {
+  describe("on.proxyReq — header spoofing prevention (#10)", () => {
     it("strips client x-user-* headers and injects from session", () => {
       const removed = [];
       const set = {};
@@ -77,7 +77,7 @@ describe("proxy", () => {
         },
       };
 
-      capturedOptions.onProxyReq(proxyReq, req, {});
+      capturedOptions.on.proxyReq(proxyReq, req, {});
 
       expect(removed).toContain("x-user-email");
       expect(removed).toContain("x-user-sub");
@@ -95,13 +95,25 @@ describe("proxy", () => {
         setHeader: (k, v) => { set[k] = v; },
       };
 
-      capturedOptions.onProxyReq(proxyReq, { auth: null }, {});
+      capturedOptions.on.proxyReq(proxyReq, { auth: null }, {});
 
       expect(removed).toContain("x-user-email");
       expect(removed).toContain("x-user-sub");
       expect(removed).toContain("x-user-name");
       // Should not set any headers
       expect(Object.keys(set)).toHaveLength(0);
+    });
+
+    it("uses http-proxy-middleware v3 event hooks", () => {
+      expect(capturedOptions.on).toEqual(
+        expect.objectContaining({
+          error: expect.any(Function),
+          proxyReq: expect.any(Function),
+          proxyReqWs: expect.any(Function),
+        })
+      );
+      expect(capturedOptions.onProxyReq).toBeUndefined();
+      expect(capturedOptions.onError).toBeUndefined();
     });
   });
 });
