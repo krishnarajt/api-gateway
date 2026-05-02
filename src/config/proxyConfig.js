@@ -79,6 +79,14 @@ function normalizeConfig(rawCfg) {
     }
   }
 
+  const mappingNames = new Set();
+  for (const m of cfg.mappings) {
+    if (mappingNames.has(m.name)) {
+      throw new Error(`Duplicate mapping name: ${m.name}`);
+    }
+    mappingNames.add(m.name);
+  }
+
   return cfg;
 }
 

@@ -200,16 +200,17 @@ cp .env.example .env
 
 ### Proxy Configuration (Postgres)
 
-The active gateway configuration lives in Postgres in `DB_SCHEMA.api_gateway_config`. The table is created automatically at startup:
+The active gateway configuration lives in normalized Postgres tables under `DB_SCHEMA`. The tables are created automatically at startup:
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `config_key` | `text` | Singleton key, currently `active` |
-| `default_backend` | `text` | Fallback backend URL |
-| `allowed_origins` | `jsonb` | CORS/frontend allowlist |
-| `mappings` | `jsonb` | Route mappings |
+| Table | Key Columns | Description |
+|-------|-------------|-------------|
+| `api_gateway_config` | `config_key`, `default_backend` | Singleton config row, currently keyed by `active` |
+| `api_gateway_allowed_origins` | `config_key`, `origin`, `sort_order` | One CORS/frontend allowlist origin per row |
+| `api_gateway_mappings` | `config_key`, `name`, `backend`, `sort_order` | One route mapping per row |
 
-If that table has no `active` row, the gateway seeds it once from `CONFIG_BOOTSTRAP_PATH` (`config.yml` by default). After seeding, the admin UI and API write Postgres directly.
+If `api_gateway_config` has no `active` row, the gateway seeds the normalized tables once from `CONFIG_BOOTSTRAP_PATH` (`config.yml` by default). After seeding, the admin UI and API write Postgres directly.
+
+Existing deployments that still have legacy `allowed_origins` or `mappings` JSONB columns on `api_gateway_config` are migrated into the child tables on startup, then those legacy columns are dropped.
 
 ```json
 {
@@ -377,7 +378,7 @@ Replaces the active Postgres configuration.
 
 **Behavior:**
 - Validates required fields (`defaultBackend`, `mappings` array)
-- Writes to `DB_SCHEMA.api_gateway_config`
+- Writes to the normalized Postgres config tables under `DB_SCHEMA`
 - Hot-refreshes the in-memory CORS allowlist and route mappings
 - Refreshes health checker for new/changed backends
 

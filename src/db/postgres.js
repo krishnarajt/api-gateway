@@ -24,6 +24,12 @@ export const dbSchema = normalizeIdentifier(
 export const gatewayConfigTable = `${quoteIdentifier(dbSchema)}.${quoteIdentifier(
 	"api_gateway_config"
 )}`;
+export const gatewayAllowedOriginsTable = `${quoteIdentifier(
+	dbSchema
+)}.${quoteIdentifier("api_gateway_allowed_origins")}`;
+export const gatewayMappingsTable = `${quoteIdentifier(dbSchema)}.${quoteIdentifier(
+	"api_gateway_mappings"
+)}`;
 
 export const pool = new Pool({
 	connectionString: config.database.url,

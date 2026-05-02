@@ -92,4 +92,19 @@ describe("proxyConfig", () => {
       })
     ).rejects.toThrow(/name and backend/);
   });
+
+  it("rejects duplicate mapping names after normalization", async () => {
+    const proxyConfig = await loadProxyConfig();
+
+    await expect(
+      proxyConfig.writeAndReloadConfig({
+        defaultBackend: "http://fallback:9999",
+        allowedOrigins: [],
+        mappings: [
+          { name: "New App", backend: "http://backend:3000" },
+          { name: "newapp", backend: "http://other-backend:3000" },
+        ],
+      })
+    ).rejects.toThrow(/Duplicate mapping name: newapp/);
+  });
 });

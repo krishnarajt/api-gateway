@@ -15,7 +15,7 @@ import logger from "../utils/logger.js";
 
 const r = Router();
 const validationMessage =
-  /defaultBackend|required|must|Each mapping|allowedOrigins|mappings/i;
+  /defaultBackend|required|must|Each mapping|allowedOrigins|mappings|Duplicate mapping/i;
 
 // All admin routes require authentication
 r.use(requireAuth);
