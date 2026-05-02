@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: ghcr.io/krishnarajt/api-gateway:git-1eddc1a13b8c45194928789d424d95208ce0029b
+          image: ghcr.io/krishnarajt/api-gateway:git-cfb657a5ade8e676624b2ef015b447eb1155e612
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
