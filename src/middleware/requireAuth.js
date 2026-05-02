@@ -1,6 +1,32 @@
 import config from "../config/index.js";
 import { getSession, setSession } from "../services/sessionStore.js";
-import { refreshTokens } from "../services/oidc.js";
+import { fetchUserinfo, refreshTokens } from "../services/oidc.js";
+
+function bearerTokenFromRequest(req) {
+	const header = req.get?.("authorization") || req.headers?.authorization || "";
+	const match = header.match(/^Bearer\s+(.+)$/i);
+	return match ? match[1].trim() : null;
+}
+
+async function authenticateBearer(req, token) {
+	const userinfo = await fetchUserinfo(token);
+	if (!userinfo?.sub) return false;
+
+	req.auth = {
+		source: "bearer",
+		sid: null,
+		tokenSet: {
+			access_token: token,
+			token_type: "Bearer",
+			user: {
+				email: userinfo.email || userinfo.preferred_username || null,
+				sub: userinfo.sub,
+				name: userinfo.name || userinfo.preferred_username || null,
+			},
+		},
+	};
+	return true;
+}
 
 export default async function requireAuth(req, res, next) {
 	try {
@@ -8,7 +34,11 @@ export default async function requireAuth(req, res, next) {
 
 		const sid = req.cookies?.[config.cookie.name];
 		const sess = await getSession(sid);
-		if (!sess?.access_token) return res.status(401).json({ error: "Unauthorized" });
+		const bearerToken = bearerTokenFromRequest(req);
+		if (!sess?.access_token) {
+			if (bearerToken && (await authenticateBearer(req, bearerToken))) return next();
+			return res.status(401).json({ error: "Unauthorized" });
+		}
 
 		// Refresh if access token is near expiry and we have a refresh token
 		const now = Math.floor(Date.now() / 1000);
