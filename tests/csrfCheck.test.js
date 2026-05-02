@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// We need to control config.allowedOrigins per test
+// We need to control allowed origins per test
 let mockAllowedOrigins = [];
 
-vi.mock("../src/config/index.js", () => ({
-  default: {
-    get allowedOrigins() { return mockAllowedOrigins; },
-  },
+vi.mock("../src/config/proxyConfig.js", () => ({
+  getAllowedOrigins: () => mockAllowedOrigins,
 }));
 
 const { default: csrfCheck } = await import("../src/middleware/csrfCheck.js");

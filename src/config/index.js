@@ -36,6 +36,15 @@ const config = {
 		password: process.env.REDIS_PASSWORD || undefined,
 	},
 
+	database: {
+		url: must("DATABASE_URL"),
+		schema: process.env.DB_SCHEMA || "api_gateway",
+		bootstrapConfigPath: process.env.CONFIG_BOOTSTRAP_PATH || "config.yml",
+		poolMax: num("DATABASE_POOL_MAX", 10),
+		idleTimeoutMillis: num("DATABASE_IDLE_TIMEOUT_MS", 30_000),
+		connectionTimeoutMillis: num("DATABASE_CONNECTION_TIMEOUT_MS", 10_000),
+	},
+
 	oidc: {
 		issuer: must("OIDC_ISSUER"),
 		authorizeUrl: must("OIDC_AUTHORIZATION_ENDPOINT"),

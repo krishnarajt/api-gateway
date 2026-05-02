@@ -8,7 +8,7 @@ vi.mock("../src/config/index.js", () => ({
     port: 9999,
     baseUrl: "https://bff.example.com",
     cookie: { name: "sid", domain: "example.com", secure: true, sameSite: "none" },
-    redisUrl: "redis://localhost:6379",
+    redis: { host: "localhost", port: 6379, password: undefined },
     oidc: {
       issuer: "https://auth.example.com/",
       authorizeUrl: "https://auth.example.com/authorize",
@@ -29,6 +29,7 @@ vi.mock("../src/config/proxyConfig.js", () => ({
   allowedOrigins: ["https://frontend.example.com"],
   allowedFrontendHosts: ["https://frontend.example.com"],
   getAllowedOrigins: () => ["https://frontend.example.com"],
+  getAllowedFrontendHosts: () => ["https://frontend.example.com"],
   getMappings: () => [],
   getDefaultBackend: () => "http://fallback:9999",
   mappings: [],

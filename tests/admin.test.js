@@ -15,7 +15,7 @@ vi.mock("../src/config/index.js", () => ({
 const mockGetRawConfig = vi.fn(() => ({
   defaultBackend: "http://fallback:9999",
   allowedOrigins: ["https://frontend.example.com"],
-  mappings: [{ frontendHost: "app.example.com", backend: "http://backend:3000" }],
+  mappings: [{ name: "app", backend: "http://backend:3000" }],
 }));
 const mockWriteAndReloadConfig = vi.fn();
 const mockReloadConfig = vi.fn();
@@ -118,7 +118,7 @@ describe("admin routes", () => {
       const newCfg = {
         defaultBackend: "http://new-fallback:8080",
         allowedOrigins: ["https://new-frontend.example.com"],
-        mappings: [{ frontendHost: "new.example.com", backend: "http://new-backend:3000" }],
+        mappings: [{ name: "new-app", backend: "http://new-backend:3000" }],
       };
 
       mockGetRawConfig.mockReturnValueOnce(newCfg); // after write
@@ -147,7 +147,7 @@ describe("admin routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("rejects mapping without frontendHost", async () => {
+    it("rejects mapping without name", async () => {
       const app = buildApp();
       const res = await request(app, "PUT", "/admin/config", {
         body: {
@@ -156,12 +156,12 @@ describe("admin routes", () => {
         },
       });
       expect(res.status).toBe(400);
-      expect(res.json.error).toMatch(/frontendHost/);
+      expect(res.json.error).toMatch(/name/);
     });
   });
 
   describe("POST /admin/config/reload", () => {
-    it("reloads config from disk", async () => {
+    it("reloads config from Postgres", async () => {
       const app = buildApp();
       const res = await request(app, "POST", "/admin/config/reload");
       expect(res.status).toBe(200);

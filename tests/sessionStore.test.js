@@ -20,7 +20,7 @@ vi.mock("ioredis", () => ({
 
 // Mock config
 vi.mock("../src/config/index.js", () => ({
-  default: { redisUrl: "redis://localhost:6379" },
+  default: { redis: { host: "localhost", port: 6379, password: undefined } },
 }));
 
 // Mock crypto util

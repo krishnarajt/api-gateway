@@ -16,7 +16,7 @@ A Backend-for-Frontend (BFF) and API Gateway built with Express 5 and Node.js (>
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Environment Variables](#environment-variables)
-  - [Proxy Configuration (config.yml)](#proxy-configuration-configyml)
+  - [Proxy Configuration (Postgres)](#proxy-configuration-postgres)
   - [Running the Application](#running-the-application)
 - [API Reference](#api-reference)
   - [Authentication Endpoints](#authentication-endpoints)
@@ -52,14 +52,14 @@ A Backend-for-Frontend (BFF) and API Gateway built with Express 5 and Node.js (>
 - **OIDC Authentication** with PKCE (Proof Key for Code Exchange) via Authentik
 - **Redis-backed sessions** with 8-hour rolling TTL
 - **Automatic token refresh** when access tokens near expiry
-- **Dynamic API gateway** routing requests to backends based on host, port, and path prefix
+- **Dynamic API gateway** routing requests to backends by `/api/<app-name>` path mapping
 - **Authenticated user header injection** (`x-user-email`, `x-user-sub`, `x-user-name`) into proxied requests
 - **Admin API** for live config updates, config reloading, and backend health inspection
 - **Backend health monitoring** with periodic checks and downtime notifications
 - **Security hardened** with Helmet, CORS, rate limiting, httpOnly cookies, and header spoofing prevention
 - **Structured logging** with Pino (JSON in production, pretty-printed in development)
 - **WebSocket proxying** with session-authenticated upgrades and user header injection
-- **Docker-ready** with multi-service Compose (Redis + BFF)
+- **Docker-ready** with multi-service Compose (Redis + Postgres + BFF)
 - **Static file serving** with HTML fallback for SPA frontends
 
 ---
@@ -113,13 +113,16 @@ src/
 ├── server.js                 # HTTP server entry point
 ├── config/
 │   ├── index.js              # Environment variable loading & schema
-│   └── proxyConfig.js        # config.yml loading, validation, live reload
+│   ├── postgresConfigStore.js # Postgres-backed gateway config persistence
+│   └── proxyConfig.js        # DB config loading, validation, live reload
+├── db/
+│   └── postgres.js           # Postgres pool and schema helpers
 ├── routes/
 │   ├── auth.js               # OIDC login, callback, logout
 │   ├── api.js                # /whoami/me user info endpoint
 │   ├── proxy_routes.js       # /api/* dynamic proxy middleware
 │   ├── admin.js              # /admin config & health endpoints
-│   └── health.js             # /healthz liveness check
+│   └── health.js             # /health and /healthz liveness checks
 ├── middleware/
 │   ├── requireAuth.js        # Session validation + auto token refresh
 │   └── csrfCheck.js          # Origin/Referer CSRF validation
@@ -166,7 +169,14 @@ cp .env.example .env
 | `NODE_ENV` | No | `development` | `development` or `production` |
 | `LOG_LEVEL` | No | `info` | Pino log level |
 | **Redis** | | | |
-| `REDIS_URL` | Yes | — | Redis connection string (e.g., `redis://redis:6379`) |
+| `REDIS_HOST` | Yes | — | Redis hostname |
+| `REDIS_PORT` | No | `6379` | Redis port |
+| `REDIS_PASSWORD` | No | — | Redis password |
+| **Postgres** | | | |
+| `DATABASE_URL` | Yes | — | Postgres URL, usually injected from Vault (e.g., `postgresql://api_gateway:<pw>@postgres:5432/api_gateway`) |
+| `DB_SCHEMA` | No | `api_gateway` | Schema used for gateway-owned tables |
+| `CONFIG_BOOTSTRAP_PATH` | No | `config.yml` | Optional first-run seed file used only when the DB config row is empty |
+| `DATABASE_POOL_MAX` | No | `10` | Max Postgres pool connections |
 | **OIDC** | | | |
 | `OIDC_ISSUER` | Yes | — | OIDC issuer URL |
 | `OIDC_AUTHORIZATION_ENDPOINT` | Yes | — | Authorization endpoint |
@@ -186,38 +196,40 @@ cp .env.example .env
 | `SESSION_COOKIE_SECURE` | No | `true` | Require HTTPS for cookie |
 | `SESSION_COOKIE_SAMESITE` | No | `none` | Cookie SameSite attribute (`Lax`, `Strict`, `None`) |
 | **Security** | | | |
-| `ALLOWED_ORIGINS` | No | — | Comma-separated allowed origins (merged with config.yml) |
+| `ALLOWED_ORIGINS` | No | — | Comma-separated extra allowed origins merged with the Postgres config |
 
-### Proxy Configuration (config.yml)
+### Proxy Configuration (Postgres)
 
-The `config.yml` file at the project root defines backend routing and allowed origins:
+The active gateway configuration lives in Postgres in `DB_SCHEMA.api_gateway_config`. The table is created automatically at startup:
 
-```yaml
-defaultBackend: "http://backend-service:4070"   # fallback when no mapping matches
+| Column | Type | Description |
+|--------|------|-------------|
+| `config_key` | `text` | Singleton key, currently `active` |
+| `default_backend` | `text` | Fallback backend URL |
+| `allowed_origins` | `jsonb` | CORS/frontend allowlist |
+| `mappings` | `jsonb` | Route mappings |
 
-allowedOrigins:
-  - "https://app.example.com"
-  - "https://admin.example.com"
+If that table has no `active` row, the gateway seeds it once from `CONFIG_BOOTSTRAP_PATH` (`config.yml` by default). After seeding, the admin UI and API write Postgres directly.
 
-mappings:
-  - frontendHost: "app.example.com"
-    backend: "http://backend-a:7001"
-  - frontendHost: "api.example.com"
-    frontendPort: 443                           # optional: match specific port
-    pathPrefix: "/v2"                           # optional: match URL path prefix
-    backend: "http://backend-b:8080"
+```json
+{
+  "defaultBackend": "http://backend-service:4070",
+  "allowedOrigins": ["https://app.example.com", "https://admin.example.com"],
+  "mappings": [
+    { "name": "vocabuildary", "backend": "http://vocabuildary:8000" },
+    { "name": "authentic-tracker", "backend": "http://tracker:3000" }
+  ]
+}
 ```
 
 **Mapping fields:**
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `frontendHost` | Yes | Hostname from the request `Host` header to match |
+| `name` | Yes | First path segment after `/api`, e.g. `/api/vocabuildary/*` |
 | `backend` | Yes | Target backend URL to proxy to |
-| `frontendPort` | No | Match requests only from this port |
-| `pathPrefix` | No | Match requests whose URL starts with this path |
 
-This config can be updated at runtime via the [Admin API](#admin-endpoints).
+This config can be updated at runtime via the [Admin API](#admin-endpoints). Saves hot-refresh the in-memory CORS allowlist, route mappings, and backend health checker.
 
 ### Running the Application
 
@@ -351,7 +363,7 @@ Returns the current proxy configuration.
 {
   "defaultBackend": "http://backend:4070",
   "allowedOrigins": ["https://app.example.com"],
-  "mappings": [{"frontendHost": "...", "backend": "..."}]
+  "mappings": [{"name": "vocabuildary", "backend": "http://vocabuildary:8000"}]
 }
 ```
 
@@ -359,14 +371,14 @@ Returns the current proxy configuration.
 
 #### `PUT /admin/config`
 
-Replaces the entire `config.yml` configuration.
+Replaces the active Postgres configuration.
 
 **Request Body:** New configuration object with `defaultBackend` and `mappings[]`.
 
 **Behavior:**
 - Validates required fields (`defaultBackend`, `mappings` array)
-- Writes to `config.yml` on disk
-- Reloads the in-memory configuration
+- Writes to `DB_SCHEMA.api_gateway_config`
+- Hot-refreshes the in-memory CORS allowlist and route mappings
 - Refreshes health checker for new/changed backends
 
 **Response:** `200 {"ok": true, "config": {...}}`
@@ -375,7 +387,7 @@ Replaces the entire `config.yml` configuration.
 
 #### `POST /admin/config/reload`
 
-Reloads `config.yml` from disk without writing.
+Reloads the active config row from Postgres without writing.
 
 **Response:** `200 {"ok": true, "config": {...}}`
 
@@ -403,7 +415,7 @@ Returns health status for all configured backends.
 
 ### Health Check
 
-#### `GET /healthz`
+#### `GET /health` or `GET /healthz`
 
 Simple liveness probe.
 
@@ -503,17 +515,13 @@ The `requireAuth` middleware automatically refreshes tokens when the access toke
 
 When a request hits `/api/*`, the proxy resolves the target backend:
 
-1. Extract and normalize the `Host` header (lowercase, split host/port)
-2. Iterate through `config.yml` mappings:
-   - Match `frontendHost` (case-insensitive)
-   - If `frontendPort` is specified, the request port must also match
-   - If `pathPrefix` is specified, `req.url` must start with it — return this backend immediately (exact match priority)
-   - Otherwise, save as a fallback match (host-only)
-3. Return: pathPrefix match > host-only match > `defaultBackend`
+1. Extract the first path segment after `/api`, e.g. `/api/vocabuildary/words` -> `vocabuildary`
+2. Find a Postgres-backed mapping whose `name` matches that segment
+3. Return the matched mapping backend, otherwise `defaultBackend`
 
-**Path rewriting:** The `/api` prefix is stripped. For example:
-- `/api/v1/users` -> `/v1/users`
-- `/api/graphql` -> `/graphql`
+**Path rewriting:** The `/api/<mapping-name>` prefix is stripped. For example:
+- `/api/vocabuildary/words` -> `/words`
+- `/api/authentic-tracker/events` -> `/events`
 
 ### User Header Injection
 
@@ -540,7 +548,7 @@ WebSocket connections to `wss://your-host/api/*` are fully supported. The BFF ha
 3. The session cookie is parsed and validated against Redis
 4. If unauthenticated, the upgrade is rejected with `401 Unauthorized` and the socket is destroyed
 5. Client-provided `x-user-*` headers are stripped and trusted values from the session are injected
-6. The `/api` prefix is stripped (same as HTTP proxy: `/api/ws/chat` becomes `/ws/chat`)
+6. The `/api/<mapping-name>` prefix is stripped (same as HTTP proxy: `/api/vocabuildary/ws` becomes `/ws`)
 7. The upgrade is forwarded to the resolved backend via the same routing algorithm as HTTP requests
 
 **Client example:**
@@ -561,8 +569,8 @@ ws.onclose = (e) => console.log("Closed:", e.code, e.reason);
 | Path prefix | `/api/*` (same as HTTP proxy) |
 | Authentication | Session cookie validated against Redis |
 | User headers | `x-user-email`, `x-user-sub`, `x-user-name` injected |
-| Path rewriting | `/api` prefix stripped before forwarding |
-| Backend routing | Same host/port/pathPrefix algorithm as HTTP |
+| Path rewriting | `/api/<mapping-name>` prefix stripped before forwarding |
+| Backend routing | Same app-name mapping algorithm as HTTP |
 | Unauthenticated | Socket destroyed with `401` response |
 
 **Note:** WebSocket upgrades bypass Express middleware entirely (including CORS, rate limiting, and body parsers). Authentication is handled directly in the `upgrade` event handler on the HTTP server. Backend services receive the same trusted `x-user-*` headers as they do for HTTP requests.
@@ -581,7 +589,7 @@ Security headers applied to all responses:
 
 ### CORS
 
-- Origins validated against `config.yml` `allowedOrigins` merged with `ALLOWED_ORIGINS` env variable
+- Origins validated against Postgres `allowedOrigins` merged with the optional `ALLOWED_ORIGINS` env variable
 - Credentials: enabled
 - Allowed methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`
 - Allowed headers: `Content-Type`, `Authorization`
@@ -671,7 +679,7 @@ Log level is configurable via the `LOG_LEVEL` environment variable (default: `in
 
 ### Docker Compose
 
-Starts two services:
+Starts three services:
 
 **Redis:**
 - Image: `redis:7-alpine`
@@ -679,10 +687,16 @@ Starts two services:
 - Volume: `./redis_data:/data`
 - Healthcheck: `redis-cli ping`
 
+**Postgres:**
+- Image: `postgres:15-alpine`
+- Dev credentials: `api_gateway` / `api_gateway`
+- Volume: `postgres_data:/var/lib/postgresql/data`
+- Used for the active gateway config table
+
 **BFF:**
 - Built from local Dockerfile
-- Depends on Redis (waits for healthy)
-- Mounts `config.yml` into the container
+- Depends on Redis and Postgres (waits for healthy)
+- Mounts `config.yml` read-only only as an optional first-run seed
 - Port: 5000
 - Restart: `unless-stopped`
 

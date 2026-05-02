@@ -28,6 +28,7 @@ vi.mock("../src/config/proxyConfig.js", () => ({
   allowedOrigins: ["https://frontend.example.com"],
   allowedFrontendHosts: ["https://frontend.example.com"],
   getAllowedOrigins: () => ["https://frontend.example.com"],
+  getAllowedFrontendHosts: () => ["https://frontend.example.com"],
   mappings: [],
   defaultBackend: "http://fallback:9999",
 }));

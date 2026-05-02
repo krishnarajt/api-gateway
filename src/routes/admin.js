@@ -14,19 +14,21 @@ import {
 import logger from "../utils/logger.js";
 
 const r = Router();
+const validationMessage =
+  /defaultBackend|required|must|Each mapping|allowedOrigins|mappings/i;
 
 // All admin routes require authentication
 r.use(requireAuth);
 
 // ---- Config endpoints ----
 
-/** GET /admin/config — return current config.yml contents */
+/** GET /admin/config — return current Postgres-backed config */
 r.get("/config", (_req, res) => {
   res.json(getRawConfig());
 });
 
-/** PUT /admin/config — replace entire config.yml, reload, and refresh health checker */
-r.put("/config", (req, res) => {
+/** PUT /admin/config — replace active config in Postgres and hot-refresh */
+r.put("/config", async (req, res) => {
   try {
     const newCfg = req.body;
 
@@ -36,6 +38,12 @@ r.put("/config", (req, res) => {
     if (!Array.isArray(newCfg.mappings)) {
       return res.status(400).json({ error: "mappings must be an array" });
     }
+    if (
+      newCfg.allowedOrigins != null &&
+      !Array.isArray(newCfg.allowedOrigins)
+    ) {
+      return res.status(400).json({ error: "allowedOrigins must be an array" });
+    }
     for (const m of newCfg.mappings) {
       if (!m.name || !m.backend) {
         return res.status(400).json({
@@ -44,23 +52,24 @@ r.put("/config", (req, res) => {
       }
     }
 
-    writeAndReloadConfig(newCfg);
+    await writeAndReloadConfig(newCfg);
 
     // Re-sync health checker with new backend list
     refreshBackends(getMappings(), getDefaultBackend());
 
-    logger.info("Config updated via admin API");
+    logger.info("Config updated via admin API and Postgres");
     res.json({ ok: true, config: getRawConfig() });
   } catch (err) {
     logger.error({ err }, "Config update failed");
-    res.status(500).json({ error: err.message });
+    const status = validationMessage.test(err.message) ? 400 : 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
-/** POST /admin/config/reload — re-read config.yml from disk without writing */
-r.post("/config/reload", (_req, res) => {
+/** POST /admin/config/reload — re-read active config from Postgres */
+r.post("/config/reload", async (_req, res) => {
   try {
-    reloadConfig();
+    await reloadConfig();
     refreshBackends(getMappings(), getDefaultBackend());
     res.json({ ok: true, config: getRawConfig() });
   } catch (err) {

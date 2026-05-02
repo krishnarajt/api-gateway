@@ -1,4 +1,4 @@
-import config from "../config/index.js";
+import { getAllowedOrigins } from "../config/proxyConfig.js";
 
 const isSafe = (method) => ["GET", "HEAD", "OPTIONS", "TRACE"].includes(method);
 
@@ -8,12 +8,13 @@ export default function csrfCheck(req, res, next) {
 	// Prefer Origin when present, otherwise fall back to Referer
 	const origin = req.headers.origin || "";
 	const referer = req.headers.referer || "";
-	const allowed = (config.allowedOrigins || []).some(
+	const allowedOrigins = getAllowedOrigins();
+	const allowed = allowedOrigins.some(
 		(o) => (origin && origin === o) || (referer && referer.startsWith(o))
 	);
 
 	// If no allowedOrigins configured, enforce same-origin by Host header check
-	if (!allowed && (!config.allowedOrigins || config.allowedOrigins.length === 0)) {
+	if (!allowed && allowedOrigins.length === 0) {
 		const url = new URL(req.protocol + "://" + req.get("host"));
 		if (origin && origin !== url.origin)
 			return res.status(403).json({ error: "CSRF check failed" });
@@ -21,7 +22,7 @@ export default function csrfCheck(req, res, next) {
 			return res.status(403).json({ error: "CSRF check failed" });
 	}
 
-	if (config.allowedOrigins && config.allowedOrigins.length > 0 && !allowed) {
+	if (allowedOrigins.length > 0 && !allowed) {
 		return res.status(403).json({ error: "CSRF check failed" });
 	}
 

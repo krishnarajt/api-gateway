@@ -1,3 +1,6 @@
+# Bootstrap seed only: on startup the gateway copies this into Postgres
+# when DB_SCHEMA.api_gateway_config has no active row. Runtime admin edits
+# are saved to Postgres, not back to this file.
 defaultBackend: "http://100.69.148.22:4070"   # fallback
 
 allowedOrigins:

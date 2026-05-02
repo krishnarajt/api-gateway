@@ -13,9 +13,6 @@ RUN npm ci --omit=dev
 # Copy app source
 COPY . .
 
-# Allow the non-root node user to write config.yml at runtime (admin UI)
-RUN chown node:node config.yml
-
 # Use environment variable for port (default 5000)
 ENV NODE_ENV=production
 ENV PORT=5000

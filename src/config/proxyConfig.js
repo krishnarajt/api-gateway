@@ -1,9 +1,8 @@
-import fs from "fs";
-import path from "path";
-import yaml from "js-yaml";
 import config from "./index.js";
-
-const cfgPath = path.resolve(process.cwd(), "config.yml");
+import {
+	readConfigFromStore,
+	writeConfigToStore,
+} from "./postgresConfigStore.js";
 
 // ESM live bindings — importers always see the latest value after reloadConfig()
 export let defaultBackend = null;
@@ -11,7 +10,7 @@ export let mappings = [];
 export let allowedOrigins = [];
 export let allowedFrontendHosts = [];
 
-// Raw parsed YAML for admin reads / round-tripping
+// Raw active database config for admin reads / round-tripping
 let _raw = {};
 export function getRawConfig() {
   return structuredClone(_raw);
@@ -20,7 +19,7 @@ export function getRawConfig() {
 // ---- Internal helpers ----
 
 function normalizeMappings(rawMappings) {
-  return (rawMappings || []).map((m) => {
+  return rawMappings.map((m) => {
     const name = (m.name || "").toLowerCase().replace(/[^a-z0-9-_]/g, "");
 
     let backend = m.backend || null;
@@ -32,13 +31,62 @@ function normalizeMappings(rawMappings) {
   });
 }
 
-function buildAllowedOrigins(cfg) {
+function normalizeBackend(rawBackend) {
+  let backend = typeof rawBackend === "string" ? rawBackend.trim() : "";
+  if (backend && !/^https?:\/\//i.test(backend)) {
+    backend = `http://${backend.replace(/^\/+/, "")}`;
+  }
+  return backend;
+}
+
+function normalizeOrigins(rawOrigins) {
+  const origins = Array.isArray(rawOrigins) ? rawOrigins : [];
   return [
-    ...new Set([
-      ...(cfg.allowedOrigins || []),
-      ...(config.allowedOrigins || []),
-    ]),
+    ...new Set(
+      origins
+        .map((origin) => String(origin || "").trim())
+        .filter(Boolean)
+        .map((origin) => {
+          try {
+            return new URL(origin).origin;
+          } catch {
+            return origin;
+          }
+        })
+    ),
   ];
+}
+
+function normalizeConfig(rawCfg) {
+  const rawMappings = rawCfg?.mappings || [];
+  if (!Array.isArray(rawMappings)) {
+    throw new Error("mappings must be an array");
+  }
+
+  const cfg = {
+    defaultBackend: normalizeBackend(rawCfg?.defaultBackend),
+    allowedOrigins: normalizeOrigins(rawCfg?.allowedOrigins),
+    mappings: normalizeMappings(rawMappings),
+  };
+
+  if (!cfg.defaultBackend) {
+    throw new Error("defaultBackend is required");
+  }
+
+  for (const m of cfg.mappings) {
+    if (!m.name || !m.backend) {
+      throw new Error("Each mapping must have name and backend");
+    }
+  }
+
+  return cfg;
+}
+
+function buildAllowedOrigins(cfg) {
+  return normalizeOrigins([
+    ...(cfg.allowedOrigins || []),
+    ...(config.allowedOrigins || []),
+  ]);
 }
 
 function buildAllowedFrontendHosts(origins) {
@@ -55,28 +103,18 @@ function buildAllowedFrontendHosts(origins) {
   return Array.from(hosts);
 }
 
-function loadFromDisk() {
-  const raw = fs.readFileSync(cfgPath, "utf8");
-  const cfg = {
-    defaultBackend: undefined,
-    mappings: [],
-    allowedOrigins: [],
-    ...yaml.load(raw),
-  };
-
-  if (!cfg.defaultBackend) {
-    throw new Error("config.yml: defaultBackend is required");
-  }
+function applyConfig(rawCfg) {
+  const cfg = normalizeConfig(rawCfg);
 
   _raw = cfg;
   defaultBackend = cfg.defaultBackend;
-  mappings = normalizeMappings(cfg.mappings);
+  mappings = cfg.mappings;
   allowedOrigins = buildAllowedOrigins(cfg);
   allowedFrontendHosts = buildAllowedFrontendHosts(allowedOrigins);
 }
 
 // ---- Initial load ----
-loadFromDisk();
+await reloadConfig();
 
 // ---- Getter functions for callers that need guaranteed live values ----
 // (ESM live bindings work for direct imports, but closures capture the
@@ -85,20 +123,19 @@ loadFromDisk();
 export function getAllowedOrigins() { return allowedOrigins; }
 export function getMappings() { return mappings; }
 export function getDefaultBackend() { return defaultBackend; }
+export function getAllowedFrontendHosts() { return allowedFrontendHosts; }
 
 // ---- Public API ----
 
-/** Re-read config.yml from disk and refresh all in-memory state */
-export function reloadConfig() {
-  loadFromDisk();
+/** Re-read active config from Postgres and refresh all in-memory state */
+export async function reloadConfig() {
+  const cfg = await readConfigFromStore();
+  applyConfig(cfg);
 }
 
-/** Write new config to disk and reload. Accepts the raw config object. */
-export function writeAndReloadConfig(newCfg) {
-  if (!newCfg.defaultBackend) {
-    throw new Error("defaultBackend is required");
-  }
-  const yamlStr = yaml.dump(newCfg, { lineWidth: 120, noRefs: true });
-  fs.writeFileSync(cfgPath, yamlStr, "utf8");
-  loadFromDisk();
+/** Write new config to Postgres and refresh all in-memory state. */
+export async function writeAndReloadConfig(newCfg) {
+  const normalizedCfg = normalizeConfig(newCfg);
+  const savedCfg = await writeConfigToStore(normalizedCfg);
+  applyConfig(savedCfg);
 }

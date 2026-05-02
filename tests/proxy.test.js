@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock proxyConfig before importing proxy.js
+const mockMappings = [
+  { name: "authentic-tracker", backend: "http://backend-a:3000" },
+  { name: "vocabuildary", backend: "http://backend-b:3000" },
+];
+
 vi.mock("../src/config/proxyConfig.js", () => ({
-  mappings: [
-    { frontendHost: "app.example.com", frontendPort: null, pathPrefix: null, backend: "http://backend-a:3000" },
-    { frontendHost: "app.example.com", frontendPort: null, pathPrefix: "/v2", backend: "http://backend-b:3000" },
-    { frontendHost: "multi.example.com", frontendPort: 8080, pathPrefix: null, backend: "http://backend-c:3000" },
-    { frontendHost: "multi.example.com", frontendPort: null, pathPrefix: null, backend: "http://backend-d:3000" },
-  ],
-  defaultBackend: "http://fallback:9999",
+  getMappings: () => mockMappings,
+  getDefaultBackend: () => "http://fallback:9999",
 }));
 
 vi.mock("../src/utils/logger.js", () => ({
@@ -32,60 +32,32 @@ describe("proxy", () => {
     createApiProxy();
   });
 
-  describe("router — host matching", () => {
-    function route(host, url) {
-      return capturedOptions.router({ headers: { host }, url, originalUrl: `/api${url}` });
+  describe("router — app-name path matching", () => {
+    function route(url) {
+      return capturedOptions.router({ headers: { host: "gateway.example.com" }, url, originalUrl: `/api${url}` });
     }
 
-    it("matches exact host to backend", () => {
-      expect(route("app.example.com", "/foo")).toBe("http://backend-a:3000");
+    it("matches the first path segment to a backend", () => {
+      expect(route("/authentic-tracker/foo")).toBe("http://backend-a:3000");
     });
 
-    it("matches host + pathPrefix", () => {
-      expect(route("app.example.com", "/v2/things")).toBe("http://backend-b:3000");
-    });
-
-    it("prefers pathPrefix match over general host match", () => {
-      expect(route("app.example.com", "/v2/stuff")).toBe("http://backend-b:3000");
-    });
-
-    it("falls back to non-prefix mapping when path doesn't match prefix", () => {
-      expect(route("app.example.com", "/other")).toBe("http://backend-a:3000");
-    });
-
-    it("matches host + port when frontendPort is configured", () => {
-      expect(route("multi.example.com:8080", "/x")).toBe("http://backend-c:3000");
-    });
-
-    it("falls back to port-less mapping when port doesn't match", () => {
-      expect(route("multi.example.com:9999", "/x")).toBe("http://backend-d:3000");
+    it("matches case-insensitively", () => {
+      expect(route("/Vocabuildary/words")).toBe("http://backend-b:3000");
     });
 
     it("returns defaultBackend when no mapping matches", () => {
-      expect(route("unknown.com", "/")).toBe("http://fallback:9999");
+      expect(route("/unknown/path")).toBe("http://fallback:9999");
     });
   });
 
-  describe("pathRewrite (#12)", () => {
-    it("strips /api prefix", () => {
-      expect(capturedOptions.pathRewrite("/api/foo/bar")).toBe("/foo/bar");
+  describe("pathRewrite", () => {
+    it("strips the mapped app-name prefix", () => {
+      expect(capturedOptions.pathRewrite("/authentic-tracker/foo/bar")).toBe("/foo/bar");
     });
 
-    it("only strips leading /api", () => {
-      expect(capturedOptions.pathRewrite("/api")).toBe("");
-      expect(capturedOptions.pathRewrite("/api/")).toBe("/");
-    });
-  });
-
-  describe("router uses req.url not req.originalUrl (#12)", () => {
-    it("pathPrefix matches against mount-relative path", () => {
-      // req.url = "/v2/things" (mount-relative), req.originalUrl = "/api/v2/things"
-      const backend = capturedOptions.router({
-        headers: { host: "app.example.com" },
-        url: "/v2/things",
-        originalUrl: "/api/v2/things",
-      });
-      expect(backend).toBe("http://backend-b:3000");
+    it("leaves the backend root when only the app-name is present", () => {
+      expect(capturedOptions.pathRewrite("/authentic-tracker")).toBe("");
+      expect(capturedOptions.pathRewrite("/authentic-tracker/")).toBe("/");
     });
   });
 

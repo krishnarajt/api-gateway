@@ -2,7 +2,7 @@ import { Router } from "express";
 import config from "../config/index.js";
 import {
 	getAllowedOrigins,
-	allowedFrontendHosts,
+	getAllowedFrontendHosts,
 } from "../config/proxyConfig.js";
 import {
 	buildAuthorizeUrl,
@@ -80,7 +80,7 @@ function isAllowedFrontendHost(host) {
 	}
 	const normalized = normalizeFrontendHost(host);
 	if (!normalized) return false;
-	return allowedFrontendHosts.includes(normalized);
+	return getAllowedFrontendHosts().includes(normalized);
 }
 
 r.get("/login", async (req, res, next) => {

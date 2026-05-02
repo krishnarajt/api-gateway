@@ -41,7 +41,7 @@ app.use(
 app.use(pinoHttp({ logger }));
 if (config.nodeEnv === "development") app.use(morgan("dev"));
 
-// CORS — driven by config.yml allowedOrigins + ALLOWED_ORIGINS env
+// CORS — driven by Postgres allowedOrigins + ALLOWED_ORIGINS env
 app.use(
 	cors({
 		origin: (origin, callback) => {
