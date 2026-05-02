@@ -16,8 +16,10 @@ vi.mock("../src/services/sessionStore.js", () => ({
 }));
 
 const mockRefreshTokens = vi.fn();
+const mockFetchUserinfo = vi.fn();
 vi.mock("../src/services/oidc.js", () => ({
   refreshTokens: (...args) => mockRefreshTokens(...args),
+  fetchUserinfo: (...args) => mockFetchUserinfo(...args),
 }));
 
 const { default: requireAuth } = await import("../src/middleware/requireAuth.js");
@@ -39,6 +41,11 @@ describe("requireAuth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSetSession.mockResolvedValue(undefined);
+    mockFetchUserinfo.mockResolvedValue({
+      email: "a@b.com",
+      sub: "u1",
+      name: "Alice",
+    });
   });
 
   it("skips auth for OPTIONS requests", async () => {
@@ -84,6 +91,44 @@ describe("requireAuth", () => {
     expect(next).toHaveBeenCalledWith();
     expect(req.auth.sid).toBe("s1");
     expect(req.auth.tokenSet).toBe(sess);
+    expect(mockFetchUserinfo).not.toHaveBeenCalled();
+  });
+
+  it("hydrates missing session user from userinfo", async () => {
+    const sess = {
+      access_token: "at",
+      access_expires_at: Math.floor(Date.now() / 1000) + 3600,
+    };
+    mockGetSession.mockResolvedValueOnce(sess);
+
+    const req = makeReq({ sid: "s1" });
+    const next = vi.fn();
+    await requireAuth(req, makeRes(), next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFetchUserinfo).toHaveBeenCalledWith("at");
+    expect(mockSetSession).toHaveBeenCalledWith("s1", {
+      ...sess,
+      user: { email: "a@b.com", sub: "u1", name: "Alice" },
+    });
+    expect(req.auth.tokenSet.user).toEqual({ email: "a@b.com", sub: "u1", name: "Alice" });
+  });
+
+  it("returns 401 when missing session user cannot be hydrated", async () => {
+    const sess = {
+      access_token: "at",
+      access_expires_at: Math.floor(Date.now() / 1000) + 3600,
+    };
+    mockGetSession.mockResolvedValueOnce(sess);
+    mockFetchUserinfo.mockResolvedValueOnce(null);
+
+    const res = makeRes();
+    const next = vi.fn();
+    await requireAuth(makeReq({ sid: "s1" }), res, next);
+
+    expect(res._status).toBe(401);
+    expect(next).not.toHaveBeenCalled();
+    expect(mockSetSession).not.toHaveBeenCalled();
   });
 
   describe("token refresh preserves user (#1, #5)", () => {

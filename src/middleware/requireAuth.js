@@ -28,6 +28,27 @@ async function authenticateBearer(req, token) {
 	return true;
 }
 
+function userFromUserinfo(userinfo) {
+	if (!userinfo?.sub) return null;
+
+	return {
+		email: userinfo.email || userinfo.preferred_username || null,
+		sub: userinfo.sub,
+		name: userinfo.name || userinfo.preferred_username || null,
+	};
+}
+
+async function hydrateMissingSessionUser(sid, tokenSet) {
+	if (tokenSet.user?.sub) return tokenSet;
+
+	const user = userFromUserinfo(await fetchUserinfo(tokenSet.access_token));
+	if (!user) return null;
+
+	const hydrated = { ...tokenSet, user };
+	await setSession(sid, hydrated);
+	return hydrated;
+}
+
 export default async function requireAuth(req, res, next) {
 	try {
 		if (req.method === "OPTIONS") return next();
@@ -43,22 +64,22 @@ export default async function requireAuth(req, res, next) {
 		// Refresh if access token is near expiry and we have a refresh token
 		const now = Math.floor(Date.now() / 1000);
 		const skew = config.refreshSkewSeconds;
+		let tokenSet = sess;
 		if (sess.access_expires_at && sess.access_expires_at - now <= skew && sess.refresh_token) {
 			try {
 				const refreshed = await refreshTokens(sess.refresh_token);
-				await setSession(sid, {
-					...sess,
-					...refreshed,
-				});
-				req.auth = { sid, tokenSet: { ...sess, ...refreshed } };
+				tokenSet = { ...sess, ...refreshed };
+				await setSession(sid, tokenSet);
 			} catch (_e) {
 				// Refresh failed; fall back to 401 to force re-login
 				return res.status(401).json({ error: "Session expired" });
 			}
-		} else {
-			req.auth = { sid, tokenSet: sess };
 		}
 
+		tokenSet = await hydrateMissingSessionUser(sid, tokenSet);
+		if (!tokenSet) return res.status(401).json({ error: "Unauthorized" });
+
+		req.auth = { sid, tokenSet };
 		return next();
 	} catch (err) {
 		return next(err);
