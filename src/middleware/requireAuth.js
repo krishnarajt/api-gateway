@@ -2,10 +2,18 @@ import config from "../config/index.js";
 import { getSession, setSession } from "../services/sessionStore.js";
 import { fetchUserinfo, refreshTokens } from "../services/oidc.js";
 
+const VOCABUILDARY_MOBILE_TOKEN_PREFIX = "vbt_";
+
 function bearerTokenFromRequest(req) {
 	const header = req.get?.("authorization") || req.headers?.authorization || "";
 	const match = header.match(/^Bearer\s+(.+)$/i);
 	return match ? match[1].trim() : null;
+}
+
+function isVocabuildaryMobileTokenRequest(req, token) {
+	if (!token?.startsWith(VOCABUILDARY_MOBILE_TOKEN_PREFIX)) return false;
+	const path = req.originalUrl || req.url || req.path || "";
+	return /^\/api\/vocabuildary(?:\/|$)/i.test(path) || /^\/vocabuildary(?:\/|$)/i.test(path);
 }
 
 async function authenticateBearer(req, token) {
@@ -57,6 +65,7 @@ export default async function requireAuth(req, res, next) {
 		const sess = await getSession(sid);
 		const bearerToken = bearerTokenFromRequest(req);
 		if (!sess?.access_token) {
+			if (isVocabuildaryMobileTokenRequest(req, bearerToken)) return next();
 			if (bearerToken && (await authenticateBearer(req, bearerToken))) return next();
 			return res.status(401).json({ error: "Unauthorized" });
 		}

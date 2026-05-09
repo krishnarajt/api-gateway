@@ -24,8 +24,8 @@ vi.mock("../src/services/oidc.js", () => ({
 
 const { default: requireAuth } = await import("../src/middleware/requireAuth.js");
 
-function makeReq(cookies = {}, method = "GET") {
-  return { cookies, method };
+function makeReq(cookies = {}, method = "GET", extra = {}) {
+  return { cookies, method, ...extra };
 }
 function makeRes() {
   const res = {
@@ -61,6 +61,49 @@ describe("requireAuth", () => {
     const next = vi.fn();
 
     await requireAuth(makeReq({}), res, next);
+
+    expect(res._status).toBe(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("allows Vocabuildary mobile bearer tokens to pass through to the backend", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    const next = vi.fn();
+    const req = makeReq(
+      {},
+      "GET",
+      {
+        originalUrl: "/api/vocabuildary/test-trigger",
+        headers: { authorization: "Bearer vbt_mobile_token" },
+        get(name) {
+          return this.headers?.[name.toLowerCase()];
+        },
+      }
+    );
+
+    await requireAuth(req, makeRes(), next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFetchUserinfo).not.toHaveBeenCalled();
+  });
+
+  it("still rejects Vocabuildary-style mobile tokens on non-Vocabuildary routes", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    const res = makeRes();
+    const next = vi.fn();
+    const req = makeReq(
+      {},
+      "GET",
+      {
+        originalUrl: "/api/other-service/private",
+        headers: { authorization: "Bearer vbt_mobile_token" },
+        get(name) {
+          return this.headers?.[name.toLowerCase()];
+        },
+      }
+    );
+
+    await requireAuth(req, res, next);
 
     expect(res._status).toBe(401);
     expect(next).not.toHaveBeenCalled();
