@@ -55,7 +55,7 @@ function setSessionCookie(res, sid, req) {
 function normalizeFrontendHost(val) {
 	if (!val || typeof val !== "string") return null;
 	let v = val.trim();
-	if (!/^https?:\/\//i.test(v)) {
+	if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) {
 		if (/^localhost(:\d+)?$/.test(v) || /^127\.\d+\.\d+\.\d+/.test(v)) {
 			v = `http://${v}`;
 		} else {
@@ -65,8 +65,10 @@ function normalizeFrontendHost(val) {
 	v = v.replace(/\/$/, "");
 	try {
 		const u = new URL(v);
-		if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-		return `${u.protocol}//${u.hostname}`;
+		if (u.protocol === "https:" || u.protocol === "http:") {
+			return `${u.protocol}//${u.hostname}`;
+		}
+		return `${u.protocol}//${u.host}${u.pathname}`.replace(/\/$/, "");
 	} catch {
 		return null;
 	}

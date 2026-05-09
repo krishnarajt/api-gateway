@@ -81,6 +81,28 @@ describe("proxyConfig", () => {
     expect(proxyConfig.getAllowedOrigins()).toContain("https://new.example.com");
   });
 
+  it("preserves custom-scheme redirect URIs instead of normalizing them to null", async () => {
+    const proxyConfig = await loadProxyConfig();
+
+    await proxyConfig.writeAndReloadConfig({
+      defaultBackend: "new-fallback:8080",
+      allowedOrigins: ["com.kptgames.vocabuildary://auth"],
+      mappings: [{ name: "New App", backend: "new-backend:3000" }],
+    });
+
+    expect(storeMocks.writeConfigToStore).toHaveBeenCalledWith({
+      defaultBackend: "http://new-fallback:8080",
+      allowedOrigins: ["com.kptgames.vocabuildary://auth"],
+      mappings: [{ name: "newapp", backend: "http://new-backend:3000" }],
+    });
+    expect(proxyConfig.getAllowedOrigins()).toContain(
+      "com.kptgames.vocabuildary://auth"
+    );
+    expect(proxyConfig.getAllowedFrontendHosts()).toContain(
+      "com.kptgames.vocabuildary://auth"
+    );
+  });
+
   it("rejects invalid mapping rows", async () => {
     const proxyConfig = await loadProxyConfig();
 

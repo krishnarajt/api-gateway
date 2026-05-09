@@ -25,10 +25,22 @@ vi.mock("../src/config/index.js", () => ({
 }));
 
 vi.mock("../src/config/proxyConfig.js", () => ({
-  allowedOrigins: ["https://frontend.example.com"],
-  allowedFrontendHosts: ["https://frontend.example.com"],
-  getAllowedOrigins: () => ["https://frontend.example.com"],
-  getAllowedFrontendHosts: () => ["https://frontend.example.com"],
+  allowedOrigins: [
+    "https://frontend.example.com",
+    "com.kptgames.vocabuildary://auth",
+  ],
+  allowedFrontendHosts: [
+    "https://frontend.example.com",
+    "com.kptgames.vocabuildary://auth",
+  ],
+  getAllowedOrigins: () => [
+    "https://frontend.example.com",
+    "com.kptgames.vocabuildary://auth",
+  ],
+  getAllowedFrontendHosts: () => [
+    "https://frontend.example.com",
+    "com.kptgames.vocabuildary://auth",
+  ],
   mappings: [],
   defaultBackend: "http://fallback:9999",
 }));
@@ -144,6 +156,22 @@ describe("auth routes", () => {
 
       expect(res.status).toBe(400);
       expect(res.json.error).toMatch(/Disallowed/i);
+    });
+
+    it("accepts allowed custom-scheme frontend_host values", async () => {
+      const app = buildApp();
+      const res = await request(
+        app,
+        "GET",
+        "/auth/login?frontend_host=com.kptgames.vocabuildary%3A%2F%2Fauth&next=/dashboard"
+      );
+
+      expect(res.status).toBe(302);
+      expect(res.location).toBe("https://auth.example.com/authorize?mock=1");
+
+      const statePayload = mockCreateStateRecord.mock.calls[0][0];
+      expect(statePayload.returnToHost).toBe("com.kptgames.vocabuildary://auth");
+      expect(statePayload.next).toBe("/dashboard");
     });
   });
 

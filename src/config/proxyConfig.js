@@ -48,7 +48,17 @@ function normalizeOrigins(rawOrigins) {
         .filter(Boolean)
         .map((origin) => {
           try {
-            return new URL(origin).origin;
+            const parsed = new URL(origin);
+            if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+              return parsed.origin;
+            }
+
+            // Preserve non-HTTP(S) custom-scheme redirect URIs such as
+            // com.example.app://auth instead of collapsing them to "null".
+            return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.replace(
+              /\/$/,
+              ""
+            );
           } catch {
             return origin;
           }
@@ -102,8 +112,13 @@ function buildAllowedFrontendHosts(origins) {
   for (const o of origins) {
     try {
       const u = new URL(o);
-      hosts.add(`${u.protocol}//${u.hostname}`);
-      hosts.add(u.origin);
+      if (u.protocol === "http:" || u.protocol === "https:") {
+        hosts.add(`${u.protocol}//${u.hostname}`);
+        hosts.add(u.origin);
+        continue;
+      }
+
+      hosts.add(`${u.protocol}//${u.host}${u.pathname}`.replace(/\/$/, ""));
     } catch {
       /* skip malformed */
     }
