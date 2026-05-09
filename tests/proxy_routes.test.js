@@ -65,6 +65,9 @@ describe("proxy routes", () => {
     expect(mockRequireAuth).not.toHaveBeenCalled();
     expect(res.json.proxied).toBe(true);
     expect(res.json.auth).toBeNull();
+    expect(res.json.url).toBe(
+      "/vocabuildary/mobile/auth/start?redirect_uri=com.kptgames.vocabuildary%3A%2F%2Fauth"
+    );
   });
 
   it("still requires auth for other proxied api routes", async () => {

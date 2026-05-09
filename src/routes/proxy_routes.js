@@ -5,9 +5,14 @@ import { createApiProxy } from "../services/proxy.js";
 const r = Router();
 const apiProxy = createApiProxy();
 
-// Mobile auth bootstrap endpoints must be reachable before a session exists.
-r.use("/:app/mobile/auth/start", apiProxy);
-r.use("/", requireAuth, apiProxy);
+function isPublicMobileAuthStart(req) {
+  return /^\/[a-z0-9_-]+\/mobile\/auth\/start(?:\/)?$/i.test(req.path);
+}
+
+r.use("/", (req, res, next) => {
+  if (isPublicMobileAuthStart(req)) return next();
+  return requireAuth(req, res, next);
+}, apiProxy);
 
 export { apiProxy };
 export default r;
