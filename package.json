@@ -24,7 +24,7 @@
     "http-proxy-middleware": "^3.0.5",
     "ioredis": "^5.7.0",
     "jose": "^6.0.13",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.2.0",
     "morgan": "^1.10.1",
     "nanoid": "^5.1.5",
     "pg": "^8.20.0",
